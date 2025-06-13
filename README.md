@@ -1,4 +1,3 @@
-# gametron303.github.io
 Отлично! Подготовим подробную пошаговую инструкцию по выполнению всех трёх модулей демонстрационного экзамена по специальности "Сетевое и системное администрирование" (КОД 09.02.06-1-2025) на базе ОС Debian.
 
 Мы будем использовать nmcli для управления сетевыми интерфейсами, где это применимо, и современные инструменты, такие как frr для маршрутизации и nftables для межсетевого экрана.
@@ -6,7 +5,6 @@
 Важное замечание: Согласно вашему требованию, мы полностью игнорируем технологию VLAN. В задании упоминаются VLAN 100, 200 и 999, но мы будем настраивать сети так, как будто их не существует, размещая все хосты офиса HQ в одной общей подсети. Это является адаптацией задания под указанное вами ограничение.
 
 Подготовительный этап: Виртуальные машины и IP-адресация
-
 Прежде чем начать, убедитесь, что у вас есть все необходимые виртуальные машины с установленной Debian (например, Debian 12 "Bookworm") и правильным количеством сетевых адаптеров.
 
 Топология виртуальных машин:
@@ -27,29 +25,27 @@ HQ-CLI: 1 сетевой адаптер
 
 Устройство	Интерфейс	IP-адрес / Маска	Шлюз	Описание
 ISP	ens18 (к HQ)	172.16.4.1/28	-	Сеть для связи с HQ-RTR
-	ens19 (к BR)	172.16.5.1/28	-	Сеть для связи с BR-RTR
-	ens20 (WAN)	DHCP	-	"Внешний" интернет
+ens19 (к BR)	172.16.5.1/28	-	Сеть для связи с BR-RTR
+ens20 (WAN)	DHCP	-	"Внешний" интернет
 HQ-RTR	ens18 (WAN)	172.16.4.2/28	172.16.4.1	Подключение к ISP
-	ens19 (LAN)	192.168.100.1/24	-	Локальная сеть офиса HQ
+ens19 (LAN)	192.168.100.1/24	-	Локальная сеть офиса HQ
 BR-RTR	ens18 (WAN)	172.16.5.2/28	172.16.5.1	Подключение к ISP
-	ens19 (LAN)	192.168.200.1/24	-	Локальная сеть офиса BR
+ens19 (LAN)	192.168.200.1/24	-	Локальная сеть офиса BR
 HQ-SRV	ens18	192.168.100.10/24	192.168.100.1	Сервер в HQ
 BR-SRV	ens18	192.168.200.10/24	192.168.200.1	Сервер в BR
 HQ-CLI	ens18	DHCP	192.168.100.1	Клиент в HQ
 Туннель	tun0 (HQ-RTR)	10.10.10.1/30	-	GRE-туннель
-	tun0 (BR-RTR)	10.10.10.2/30	-	GRE-туннель
-
+tun0 (BR-RTR)	10.10.10.2/30	-	GRE-туннель
 Домен для всех машин: au-team.irpo.
 
 Модуль 1: Настройка сетевой инфраструктуры
 1. Базовая настройка: имена хостов и статические IP
-
 На каждой машине установите соответствующее имя хоста.
 
 # Пример для HQ-RTR. Выполнить на всех машинах с их именами.
 hostnamectl set-hostname hq-rtr.au-team.irpo
-
-
+Use code with caution.
+Bash
 Теперь настроим сетевые интерфейсы с помощью nmcli.
 
 [На HQ-RTR]
@@ -62,13 +58,8 @@ nmcli con up "WAN"
 # Настраиваем LAN интерфейс (ens19)
 nmcli con add type ethernet con-name "LAN" ifname ens19 ip4 192.168.100.1/24
 nmcli con up "LAN"
-IGNORE_WHEN_COPYING_START
-content_copy
-download
 Use code with caution.
 Bash
-IGNORE_WHEN_COPYING_END
-
 [На BR-RTR]
 
 # Настраиваем WAN интерфейс (ens18)
@@ -79,42 +70,26 @@ nmcli con up "WAN"
 # Настраиваем LAN интерфейс (ens19)
 nmcli con add type ethernet con-name "LAN" ifname ens19 ip4 192.168.200.1/24
 nmcli con up "LAN"
-IGNORE_WHEN_COPYING_START
-content_copy
-download
 Use code with caution.
 Bash
-IGNORE_WHEN_COPYING_END
-
 [На HQ-SRV]
 
 nmcli con add type ethernet con-name "LAN" ifname ens18 ip4 192.168.100.10/24 gw4 192.168.100.1
 nmcli con mod "LAN" ipv4.dns "192.168.100.10" # Сам себе DNS
 nmcli con up "LAN"
-IGNORE_WHEN_COPYING_START
-content_copy
-download
 Use code with caution.
 Bash
-IGNORE_WHEN_COPYING_END
-
 [На BR-SRV]
 
 nmcli con add type ethernet con-name "LAN" ifname ens18 ip4 192.168.200.10/24 gw4 192.168.200.1
 nmcli con mod "LAN" ipv4.dns "192.168.100.10" # DNS-сервер в HQ
 nmcli con up "LAN"
-IGNORE_WHEN_COPYING_START
-content_copy
-download
 Use code with caution.
 Bash
-IGNORE_WHEN_COPYING_END
-
 [На HQ-CLI]
 Эта машина будет получать адрес по DHCP, пока ничего не делаем.
 
 2. Настройка ISP
-
 [На ISP]
 
 # Настраиваем интерфейсы к филиалам
@@ -141,14 +116,9 @@ apt update && apt install -y nftables
 # }
 # После редактирования файла:
 systemctl enable --now nftables
-IGNORE_WHEN_COPYING_START
-content_copy
-download
 Use code with caution.
 Bash
-IGNORE_WHEN_COPYING_END
 3. Создание пользователей
-
 [На HQ-SRV и BR-SRV]
 
 # Создаем пользователя sshuser
@@ -157,27 +127,17 @@ useradd -m -s /bin/bash sshuser
 passwd sshuser # Вводим P@ssw0rd
 # Добавляем в группу sudo, чтобы он мог выполнять команды с правами root
 usermod -aG sudo sshuser
-IGNORE_WHEN_COPYING_START
-content_copy
-download
 Use code with caution.
 Bash
-IGNORE_WHEN_COPYING_END
-
 [На HQ-RTR и BR-RTR]
 Здесь мы будем использовать frr для маршрутизации, у которого своя система пользователей. Настроим системного пользователя net_admin для доступа к ОС.
 
 useradd -m -s /bin/bash net_admin
 passwd net_admin # Вводим P@$$word
 usermod -aG sudo,frr,frrvty net_admin # Добавляем в группы для управления FRR
-IGNORE_WHEN_COPYING_START
-content_copy
-download
 Use code with caution.
 Bash
-IGNORE_WHEN_COPYING_END
 4. Настройка SSH
-
 [На HQ-SRV и BR-SRV]
 Редактируем /etc/ssh/sshd_config:
 
@@ -186,12 +146,7 @@ PermitRootLogin no
 PasswordAuthentication yes # Оставляем для простоты, в реальной жизни - ключи
 AllowUsers sshuser
 Banner /etc/issue.net
-IGNORE_WHEN_COPYING_START
-content_copy
-download
 Use code with caution.
-IGNORE_WHEN_COPYING_END
-
 Создаем файл баннера:
 echo "Authorized access only" > /etc/issue.net
 
@@ -199,7 +154,6 @@ echo "Authorized access only" > /etc/issue.net
 systemctl restart sshd
 
 5. Настройка GRE-туннеля
-
 [На HQ-RTR]
 
 # Создаем туннель
@@ -208,13 +162,8 @@ ip tunnel add tun0 mode gre remote 172.16.5.2 local 172.16.4.2 ttl 255
 ip addr add 10.10.10.1/30 dev tun0
 # Поднимаем интерфейс
 ip link set tun0 up
-IGNORE_WHEN_COPYING_START
-content_copy
-download
 Use code with caution.
 Bash
-IGNORE_WHEN_COPYING_END
-
 [На BR-RTR]
 
 # Создаем туннель
@@ -223,17 +172,11 @@ ip tunnel add tun0 mode gre remote 172.16.4.2 local 172.16.5.2 ttl 255
 ip addr add 10.10.10.2/30 dev tun0
 # Поднимаем интерфейс
 ip link set tun0 up
-IGNORE_WHEN_COPYING_START
-content_copy
-download
 Use code with caution.
 Bash
-IGNORE_WHEN_COPYING_END
-
 Проверяем пингом: ping 10.10.10.2 с HQ-RTR.
 
 6. Динамическая маршрутизация (OSPF с FRR)
-
 [На HQ-RTR и BR-RTR]
 
 # Устанавливаем FRR
@@ -280,17 +223,11 @@ exit
 exit
 write
 # --- Конец конфигурации BR-RTR ---
-IGNORE_WHEN_COPYING_START
-content_copy
-download
 Use code with caution.
 Bash
-IGNORE_WHEN_COPYING_END
-
 Проверяем: на HQ-RTR show ip route должен показать маршрут до 192.168.200.0/24.
 
 7. Настройка NAT
-
 [На HQ-RTR и BR-RTR]
 
 # Включаем форвардинг
@@ -306,14 +243,9 @@ apt install -y nftables
 # }
 # Для BR-RTR то же самое, oifname тоже будет "ens18".
 systemctl enable --now nftables
-IGNORE_WHEN_COPYING_START
-content_copy
-download
 Use code with caution.
 Bash
-IGNORE_WHEN_COPYING_END
 8. DHCP-сервер
-
 [На HQ-RTR]
 
 apt install -y isc-dhcp-server
@@ -341,17 +273,11 @@ subnet 192.168.100.0 netmask 255.255.255.0 {
 
 # Запускаем
 systemctl enable --now isc-dhcp-server
-IGNORE_WHEN_COPYING_START
-content_copy
-download
 Use code with caution.
 Bash
-IGNORE_WHEN_COPYING_END
-
 Теперь на HQ-CLI можно запустить dhclient или перезагрузить сеть, и он получит IP.
 
 9. DNS-сервер
-
 [На HQ-SRV]
 
 apt install -y bind9 bind9-utils
@@ -408,18 +334,12 @@ $TTL    604800
 named-checkconf
 named-checkzone au-team.irpo /etc/bind/db.au-team.irpo
 systemctl enable --now bind9
-IGNORE_WHEN_COPYING_START
-content_copy
-download
 Use code with caution.
 Bash
-IGNORE_WHEN_COPYING_END
-
 Проверяем с HQ-CLI: dig hq-srv.au-team.irpo @192.168.100.10.
 
 Модуль 2: Организация сетевого администрирования
 1. Доменный контроллер Samba
-
 [На BR-SRV]
 
 # Устанавливаем пакеты
@@ -450,13 +370,8 @@ samba-tool domain level show
 # Создаем пользователей и группу
 samba-tool group add hq
 for i in {1..5}; do samba-tool user create user${i}.hq --given-name=User --surname=HQ${i} --mail-address=user${i}@au-team.irpo; samba-tool group addmembers hq user${i}.hq; done
-IGNORE_WHEN_COPYING_START
-content_copy
-download
 Use code with caution.
 Bash
-IGNORE_WHEN_COPYING_END
-
 [На HQ-CLI]
 Чтобы ввести машину в домен, нужно установить пакеты и настроить realmd.
 
@@ -466,14 +381,9 @@ apt install -y realmd sssd sssd-tools adcli packagekit samba-common-bin
 # Вступаем в домен
 realm join --user=administrator au-team.irpo
 # Вводим пароль администратора домена
-IGNORE_WHEN_COPYING_START
-content_copy
-download
 Use code with caution.
 Bash
-IGNORE_WHEN_COPYING_END
 2. Файловое хранилище (RAID + NFS)
-
 [На HQ-SRV]
 
 apt install -y mdadm nfs-kernel-server
@@ -503,13 +413,8 @@ echo "/raid5/nfs 192.168.100.0/24(rw,sync,no_subtree_check)" >> /etc/exports
 # Экспортируем и перезапускаем
 exportfs -a
 systemctl restart nfs-kernel-server
-IGNORE_WHEN_COPYING_START
-content_copy
-download
 Use code with caution.
 Bash
-IGNORE_WHEN_COPYING_END
-
 [На HQ-CLI]
 
 apt install -y nfs-common
@@ -517,14 +422,9 @@ mkdir -p /mnt/nfs
 # Добавляем в /etc/fstab для автомонтирования
 echo "192.168.100.10:/raid5/nfs /mnt/nfs nfs auto,nofail,noatime,nolock,intr,tcp,actimeo=1800 0 0" >> /etc/fstab
 mount -a
-IGNORE_WHEN_COPYING_START
-content_copy
-download
 Use code with caution.
 Bash
-IGNORE_WHEN_COPYING_END
 3. Служба времени (chrony)
-
 [На HQ-RTR] (Сервер)
 
 apt install -y chrony
@@ -533,13 +433,8 @@ apt install -y chrony
 # local stratum 5
 # allow 192.168.0.0/16
 systemctl restart chrony
-IGNORE_WHEN_COPYING_START
-content_copy
-download
 Use code with caution.
 Bash
-IGNORE_WHEN_COPYING_END
-
 [На всех остальных машинах] (Клиенты)
 
 apt install -y chrony
@@ -548,14 +443,9 @@ apt install -y chrony
 # server hq-rtr.au-team.irpo iburst
 systemctl restart chrony
 chronyc sources # Проверка
-IGNORE_WHEN_COPYING_START
-content_copy
-download
 Use code with caution.
 Bash
-IGNORE_WHEN_COPYING_END
 4. Ansible
-
 [На BR-SRV]
 
 apt install -y ansible
@@ -582,14 +472,9 @@ EOF
 
 # Проверяем
 ansible all -m ping
-IGNORE_WHEN_COPYING_START
-content_copy
-download
 Use code with caution.
 Bash
-IGNORE_WHEN_COPYING_END
 5. Docker и MediaWiki
-
 [На BR-SRV]
 
 apt install -y docker.io docker-compose
@@ -626,14 +511,9 @@ EOF
 
 # Запускаем
 docker-compose -f ~/wiki.yml up -d
-IGNORE_WHEN_COPYING_START
-content_copy
-download
 Use code with caution.
 Bash
-IGNORE_WHEN_COPYING_END
 6. Nginx как Reverse Proxy
-
 [На HQ-RTR]
 
 apt install -y nginx
@@ -663,15 +543,10 @@ EOF
 # Активируем
 ln -s /etc/nginx/sites-available/reverse-proxy /etc/nginx/sites-enabled/
 systemctl restart nginx
-IGNORE_WHEN_COPYING_START
-content_copy
-download
 Use code with caution.
 Bash
-IGNORE_WHEN_COPYING_END
 Модуль 3: Эксплуатация объектов сетевой инфраструктуры
 1. Центр сертификации и HTTPS
-
 [На HQ-SRV]
 
 apt install -y easy-rsa
@@ -691,13 +566,8 @@ cd ~/my_ca
 # scp pki/issued/moodle.au-team.irpo.crt net_admin@hq-rtr:/etc/nginx/ssl/
 # scp pki/private/moodle.au-team.irpo.key net_admin@hq-rtr:/etc/nginx/ssl/
 # и т.д.
-IGNORE_WHEN_COPYING_START
-content_copy
-download
 Use code with caution.
 Bash
-IGNORE_WHEN_COPYING_END
-
 [На HQ-RTR]
 Обновляем конфиг Nginx /etc/nginx/sites-available/reverse-proxy для работы с HTTPS.
 
@@ -714,17 +584,11 @@ server {
     }
 }
 # Аналогично для wiki
-IGNORE_WHEN_COPYING_START
-content_copy
-download
 Use code with caution.
 Nginx
-IGNORE_WHEN_COPYING_END
-
 systemctl restart nginx
 
 2. Защищенный туннель (IPsec)
-
 [На HQ-RTR и BR-RTR]
 Мы будем шифровать наш существующий GRE-туннель.
 
@@ -754,14 +618,9 @@ conn gre-tunnel
 # Запускаем
 systemctl restart strongswan
 ipsec status # Проверка
-IGNORE_WHEN_COPYING_START
-content_copy
-download
 Use code with caution.
 Bash
-IGNORE_WHEN_COPYING_END
 3. Межсетевой экран (Firewall)
-
 [На HQ-RTR и BR-RTR]
 Используем nftables. Редактируем /etc/nftables.conf.
 
@@ -815,17 +674,11 @@ table inet filter {
         oifname "ens18" masquerade
     }
 }
-IGNORE_WHEN_COPYING_START
-content_copy
-download
 Use code with caution.
 Nft
-IGNORE_WHEN_COPYING_END
-
 systemctl restart nftables
 
 4. Сервер логирования и мониторинга
-
 [На HQ-SRV] (Сервер)
 
 # Syslog
@@ -844,13 +697,8 @@ apt install -y zabbix-server-pgsql zabbix-frontend-php zabbix-agent
 # Настроить /etc/zabbix/apache.conf
 # Запустить и добавить в автозагрузку
 systemctl enable --now zabbix-server zabbix-agent apache2
-IGNORE_WHEN_COPYING_START
-content_copy
-download
 Use code with caution.
 Bash
-IGNORE_WHEN_COPYING_END
-
 [На всех остальных машинах] (Клиенты логов и агенты мониторинга)
 
 # Отправка логов
@@ -864,14 +712,9 @@ apt install -y zabbix-agent
 # ServerActive=192.168.100.10
 # Hostname=<имя машины>
 systemctl enable --now zabbix-agent
-IGNORE_WHEN_COPYING_START
-content_copy
-download
 Use code with caution.
 Bash
-IGNORE_WHEN_COPYING_END
 5. Ansible: инвентаризация и бэкап
-
 [На BR-SRV]
 Создаем плейбук для сбора информации ~/inventory.yml:
 
@@ -890,13 +733,8 @@ IGNORE_WHEN_COPYING_END
           IP Address: {{ ansible_default_ipv4.address }}
         dest: "/root/PC_INFO/{{ inventory_hostname }}.yml"
       delegate_to: localhost
-IGNORE_WHEN_COPYING_START
-content_copy
-download
 Use code with caution.
 Yaml
-IGNORE_WHEN_COPYING_END
-
 Запускаем: ansible-playbook ~/inventory.yml
 
 Создаем плейбук для бэкапа конфигурации роутеров ~/backup.yml:
@@ -919,11 +757,7 @@ IGNORE_WHEN_COPYING_END
         src: /etc/nftables.conf
         dest: /root/NETWORK_INFO/{{ inventory_hostname }}/nftables.conf
         flat: yes
-IGNORE_WHEN_COPYING_START
-content_copy
-download
 Use code with caution.
 Yaml
-IGNORE_WHEN_COPYING_END
-
 Запускаем: ansible-playbook ~/backup.yml
+
