@@ -218,9 +218,20 @@ EOF
 ### 7. DHCP-сервер (ISC DHCP)
 ```bash
 apt install -y isc-dhcp-server
-# /etc/dhcp/dhcpd.conf: опции домена, подсеть 192.168.100.0/24
-# INTERFACESv4="ens19"
+authoritative;
+
+option domain-name "au-team.irpo";
+option domain-name-servers 192.168.1.2, 8.8.8.8;
+
+subnet 192.168.2.0 netmask 255.255.255.240 {
+    range 192.168.2.2 192.168.2.14;
+    option routers 192.168.2.1;
+    option broadcast-address 192.168.2.15;
+    option domain-search "au-team.irpo";
+}
+
 systemctl enable --now isc-dhcp-server
+reboot
 ```
 
 ### 8. DNS-сервер (BIND9)
