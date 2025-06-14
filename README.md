@@ -325,12 +325,164 @@ reboot
 ```
 
 ### 8. DNS-сервер (BIND9)
+# Полная настройка BIND9 и резольвера на HQ-SRV
+
+## 1. Установка BIND
+
 ```bash
+apt update
 apt install -y bind9 bind9-utils
-# /etc/bind/named.conf.options: forwarders { 8.8.8.8; 8.8.4.4; }
-# /etc/bind/named.conf.local: зоны au-team.irpo и 100.168.192.in-addr.arpa
-named-checkconf && named-checkzone au-team.irpo /etc/bind/db.au-team.irpo
+```
+
+---
+
+## 2. Основная конфигурация `/etc/bind/named.conf.options`
+
+Добавьте внутрь блока `options { … };` следующие строки:
+
+```conf
+options {
+    directory "/var/cache/bind";
+
+    recursion yes;
+    allow-query { any; };
+    forwarders {
+        8.8.8.8;
+        8.8.4.4;
+    };
+    dnssec-validation auto;
+};
+```
+
+---
+
+## 3. Описание зон в `/etc/bind/named.conf.local`
+
+```conf
+# Прямая зона
+zone "au-team.irpo" {
+    type master;
+    file "/etc/bind/db.au-team.irpo";
+};
+
+# Обратные зоны
+zone "1.168.192.in-addr.arpa" {
+    type master;
+    file "/etc/bind/db.192.168.1";
+};
+
+zone "2.168.192.in-addr.arpa" {
+    type master;
+    file "/etc/bind/db.192.168.2";
+};
+
+zone "0.168.192.in-addr.arpa" {
+    type master;
+    file "/etc/bind/db.192.168.0";
+};
+```
+
+---
+
+## 4. Содержимое файлов зон
+
+### 4.1 `/etc/bind/db.au-team.irpo`
+
+```zone
+$TTL 604800
+@    IN SOA  hq-srv.au-team.irpo. admin.au-team.irpo. ( 1 604800 86400 2419200 604800 )
+;
+@      IN NS    hq-srv.au-team.irpo.
+
+; A-записи
+hq-rtr  IN A     172.16.4.2
+br-rtr  IN A     172.16.5.2
+hq-srv  IN A     192.168.1.2
+hq-cli  IN A     192.168.2.2
+br-srv  IN A     192.168.0.2
+
+; CNAME-записи
+moodle  IN CNAME hq-rtr.au-team.irpo.
+wiki    IN CNAME hq-rtr.au-team.irpo.
+```
+
+### 4.2 `/etc/bind/db.192.168.1`
+
+```zone
+$TTL 604800
+@    IN SOA  hq-srv.au-team.irpo. admin.au-team.irpo. ( 2 604800 86400 2419200 604800 )
+;
+@      IN NS    hq-srv.au-team.irpo.
+
+; PTR-записи
+2      IN PTR   hq-srv.au-team.irpo.
+```
+
+### 4.3 `/etc/bind/db.192.168.2`
+
+```zone
+$TTL 604800
+@    IN SOA  hq-srv.au-team.irpo. admin.au-team.irpo. ( 3 604800 86400 2419200 604800 )
+;
+@      IN NS    hq-srv.au-team.irpo.
+
+; PTR-запись
+2      IN PTR   hq-cli.au-team.irpo.
+```
+
+### 4.4 `/etc/bind/db.192.168.0`
+
+```zone
+$TTL 604800
+@    IN SOA  hq-srv.au-team.irpo. admin.au-team.irpo. ( 4 604800 86400 2419200 604800 )
+;
+@      IN NS    hq-srv.au-team.irpo.
+
+; PTR-запись
+2      IN PTR   br-srv.au-team.irpo.
+```
+
+---
+
+## 5. Проверка и запуск DNS
+
+```bash
+# Проверка синтаксиса
+named-checkconf
+named-checkzone au-team.irpo       /etc/bind/db.au-team.irpo
+named-checkzone 1.168.192.in-addr.arpa /etc/bind/db.192.168.1
+named-checkzone 2.168.192.in-addr.arpa /etc/bind/db.192.168.2
+named-checkzone 0.168.192.in-addr.arpa /etc/bind/db.192.168.0
+
+# Запуск и автозапуск
 systemctl enable --now bind9
+```
+
+---
+
+## 6. Настройка `resolv.conf`
+
+Добавьте в начало `/etc/resolv.conf`:
+
+```text
+search au-team.irpo
+nameserver 127.0.0.1
+```
+
+---
+
+## 7. Тестирование
+
+```bash
+# Локальные запросы к BIND
+dig @127.0.0.1 hq-rtr.au-team.irpo A +short
+dig @127.0.0.1 -x 192.168.2.2 +short
+
+# Проверка внешней резолюции через форвардер
+dig @127.0.0.1 example.com +short
+
+# Проверка ping по имени
+ping -c3 hq-rtr.au-team.irpo
 ```
 
 ---
