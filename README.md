@@ -215,7 +215,7 @@ write
 EOF
 ```
 
-### 7. DHCP-сервер (ISC DHCP)
+### 7. DHCP-сервер (HQ-RTR DHCP)
 ```bash
 apt install -y isc-dhcp-server
 authoritative;
