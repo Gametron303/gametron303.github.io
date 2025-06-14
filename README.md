@@ -134,17 +134,66 @@ systemctl enable --now nftables
 ```
 
 ### 5. GRE-туннель
-```bash
-# HQ-RTR
-ip tunnel add tun0 mode gre remote 172.16.5.2 local 172.16.4.2 ttl 255
-ip addr add 10.10.10.1/30 dev tun0
-ip link set tun0 up
+ Настройка GRE-туннеля через nmtui
 
-# BR-RTR
-ip tunnel add tun0 mode gre remote 172.16.4.2 local 172.16.5.2 ttl 255
-ip addr add 10.10.10.2/30 dev tun0
-ip link set tun0 up
-```
+В этом файле приведены точные значения полей для двух маршрутизаторов: HQ-RTR и BR-RTR, по текущей схеме.
+
+---
+
+## 1. HQ-RTR (172.16.4.2 ↔ 172.16.5.2)
+
+1. Запустите `nmtui` → **Edit a connection** → выберите ваш IP-tunnel (например, `gre-tun0`) → **Edit**:
+
+   ```text
+   Profile name:  gre-tun0
+   Device:        tun0
+
+   ── IP tunnel ────────────────
+   Mode:          GRE
+   Parent:        ens18
+   Local IP:      172.16.4.2
+   Remote IP:     172.16.5.2
+   MTU:           1400
+
+   ── IPv4 CONFIGURATION ───────
+   Method:        Manual
+   Addresses:     10.10.10.1/30     # туннельный адрес
+   Gateway:       (leave empty)    # шлюз не нужен
+   DNS servers:   (leave empty)
+   ```
+
+2. Сохраните и **Activate** → `gre-tun0`.
+
+---
+
+## 2. BR-RTR (172.16.5.2 ↔ 172.16.4.2)
+
+1. В `nmtui` → **Edit a connection** → ваш туннель → **Edit**:
+
+   ```text
+   Profile name:  gre-tun0
+   Device:        tun0
+
+   ── IP tunnel ────────────────
+   Mode:          GRE
+   Parent:        ens18
+   Local IP:      172.16.5.2
+   Remote IP:     172.16.4.2
+   MTU:           1400
+
+   ── IPv4 CONFIGURATION ───────
+   Method:        Manual
+   Addresses:     10.10.10.2/30
+   Gateway:       (leave empty)
+   DNS servers:   (leave empty)
+   ```
+
+2. Сохраните и **Activate** → `gre-tun0`.
+
+---
+
+После этого интерфейс `tun0` будет автоматически подниматься с нужными параметрами и настройки сохранятся при перезагрузке NetworkManager.
+
 
 ### 6. OSPF (FRR)
 ```bash
