@@ -82,12 +82,6 @@ apt update && apt install -y \
 
 ---
 
-## 💡 Дополнительно
-
-- `nmtui` — текстовый интерфейс настройки сети (`network-manager` или `network-manager-gnome`)
-- Для GRE: `iproute2` (предустановлен в Debian)
-- Для RAID: убедитесь, что диски `/dev/sdb`, `/dev/sdc`, `/dev/sdd` присутствуют
-
 ## Модуль 1: Настройка сетевой инфраструктуры
 
 **Время выполнения**: 1 ч. 00 мин 
@@ -123,15 +117,111 @@ nmcli con up WAN-DHCP
 ```
 
 ### 4. Включение IP-форвардинга и NAT (nftables)
-```bash
-echo "net.ipv4.ip_forward=1" > /etc/sysctl.d/99-forwarding.conf
-sysctl -p /etc/sysctl.d/99-forwarding.conf
+Для настройки NAT и включения IP-форвардинга на ваших маршрутизаторах (HQ-RTR и BR-RTR) выполните следующие шаги:
 
-apt update && apt install -y nftables
-# В /etc/nftables.conf добавить:
-# chain postrouting { type nat hook postrouting priority 100; policy accept; oifname ens20 masquerade }
-systemctl enable --now nftables
+---
+
+## 1. Включаем IP-форвардинг
+
+1. Отредактируйте файл `/etc/sysctl.conf`:
+   ```bash
+   echo "net.ipv4.ip_forward=1" > /etc/sysctl.conf
+   ```
+2. Примените настройку:
+   ```bash
+   sysctl -з
+   ```
+3. Убедитесь, что forwarding включён:
+   ```bash
+   sysctl net.ipv4.ip_forward
+   # должно быть net.ipv4.ip_forward = 1
+   ```
+
+---
+
+# 2. Настройка NAT (MASQUERADE) через iptables
+
+Предположим, ваш «внешний» интерфейс для выхода в Интернет — `enp0s8`. Тогда:
+
+## HQ-RTR
+
+```bash
+# Filter таблица
+iptables -P INPUT ACCEPT
+iptables -P FORWARD ACCEPT
+iptables -P OUTPUT ACCEPT
+
+iptables -A FORWARD -i enp0s9  -o enp0s8 -j ACCEPT
+iptables -A FORWARD -i enp0s10 -o enp0s8 -j ACCEPT
+iptables -A FORWARD -i enp0s9  -o enp0s9 -m state --state RELATED,ESTABLISHED -j ACCEPT
+iptables -A FORWARD -i enp0s10 -o enp0s10 -m state --state RELATED,ESTABLISHED -j ACCEPT
+
+# NAT таблица
+iptables -t nat -P PREROUTING ACCEPT
+iptables -t nat -P INPUT ACCEPT
+iptables -t nat -P OUTPUT ACCEPT
+iptables -t nat -P POSTROUTING ACCEPT
+
+iptables -t nat -A POSTROUTING -s 192.168.1.0/26 -o enp0s8 -j MASQUERADE
+iptables -t nat -A POSTROUTING -s 192.168.2.0/26 -o enp0s8 -j MASQUERADE
 ```
+
+---
+
+## BR-RTR
+
+```bash
+# Filter таблица
+iptables -P INPUT ACCEPT
+iptables -P FORWARD ACCEPT
+iptables -P OUTPUT ACCEPT
+
+iptables -A FORWARD -i enp0s9 -o enp0s8 -m state --state NEW,RELATED,ESTABLISHED -j ACCEPT
+iptables -A FORWARD -i enp0s9 -o enp0s9 -m state --state NEW,RELATED,ESTABLISHED -j ACCEPT
+
+# NAT таблица
+iptables -t nat -P PREROUTING ACCEPT
+iptables -t nat -P INPUT ACCEPT
+iptables -t nat -P OUTPUT ACCEPT
+iptables -t nat -P POSTROUTING ACCEPT
+
+iptables -t nat -A POSTROUTING -s 192.168.0.0/24 -o enp0s8 -j MASQUERADE
+---
+
+## 3. Сохранение правил iptables на Debian
+
+Чтобы правила автоматически подгружались после перезагрузки:
+
+1. Установите пакет для сохранения правил:
+   ```bash
+   apt update
+   apt install -y iptables-persistent
+   ```
+2. При установке подтвердите сохранение текущих правил.  
+   Если правила появились позже, сохраните вручную:
+   ```bash
+   netfilter-persistent save
+   ```
+
+---
+
+## 4. Проверка
+
+1. Просмотреть текущие NAT-правила:
+   ```bash
+   iptables -t nat -L -n -v
+   ```
+2. Просмотреть правила FORWARD:
+   ```bash
+   iptables -L FORWARD -n -v
+   ```
+3. Проверить доступность из LAN:
+   ```bash
+   # на HQ-CLI или любой машине из подсети
+   ping -c3 8.8.8.8
+   curl -I http://example.com
+   ```
+
 
 ### 5. GRE-туннель
  Настройка GRE-туннеля через nmtui
