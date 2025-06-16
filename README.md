@@ -92,8 +92,6 @@ hostnamectl set-hostname hq-rtr.au-team.irpo
 ```
 
 ### 2. Настройка интерфейсов с nmcli
-<details>
-<summary>Пример для HQ-RTR</summary>
 ```bash
 nmcli con add type ethernet con-name WAN ifname ens18 ip4 172.16.4.2/28 gw4 172.16.4.1
 nmcli con mod WAN ipv4.dns 8.8.8.8
@@ -102,7 +100,6 @@ nmcli con up WAN
 nmcli con add type ethernet con-name LAN ifname ens19 ip4 192.168.100.1/24
 nmcli con up LAN
 ```
-</details>
 
 ### 3. Конфигурация ISP
 ```bash
@@ -129,7 +126,7 @@ nmcli con up WAN-DHCP
    ```
 2. Примените настройку:
    ```bash
-   sysctl -з
+   sysctl -p
    ```
 3. Убедитесь, что forwarding включён:
    ```bash
