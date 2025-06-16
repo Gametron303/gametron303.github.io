@@ -486,66 +486,155 @@ ping -c3 hq-rtr.au-team.irpo
 
 ## Модуль 2: Организация сетевого администрирования
 
-**Время выполнения**: 1 ч. 30 мин 
-
-### 1. Samba AD DC (BR-SRV)
+## 1. Настройка Samba на BR-SRV
 ```bash
-apt install -y samba krb5-config winbind smbclient
-samba-tool domain provision --use-rfc2307 --interactive
-cp /var/lib/samba/private/krb5.conf /etc/
-systemctl unmask samba-ad-dc && systemctl enable --now samba-ad-dc
+sudo apt-get update && sudo apt-get install samba samba-common smbclient winbind libnss-winbind libpam-winbind
+sudo samba-tool domain provision --realm=HQ.LOCAL --domain=HQ --server-role=dc --dns-backend=SAMBA_INTERNAL --adminpass='StrongAdminP@ssw0rd'
+sudo systemctl enable smb nmb winbind
+sudo systemctl start smb nmb winbind
+sudo samba-tool group add hq
+sudo samba-tool user create user1.hq Passw0rd123 --given-name="User One" --surname="HQ"
+sudo samba-tool user create user2.hq Passw0rd123 --given-name="User Two" --surname="HQ"
+sudo samba-tool user create user3.hq Passw0rd123 --given-name="User Three" --surname="HQ"
+sudo samba-tool user create user4.hq Passw0rd123 --given-name="User Four" --surname="HQ"
+sudo samba-tool user create user5.hq Passw0rd123 --given-name="User Five" --surname="HQ"
+sudo samba-tool group addmembers hq "user1.hq","user2.hq","user3.hq","user4.hq","user5.hq"
+while IFS=, read -r login pass fullname; do 
+    sudo samba-tool user create "$login" "$pass" --fullname="$fullname"
+    sudo samba-tool group addmembers hq "$login"
+done < /opt/users.csv
 ```
 
-### 2. Вход клиента в домен (HQ-CLI)
+## 2. Присоединение HQ-CLI к домену
 ```bash
-apt install -y realmd sssd sssd-tools adcli packagekit samba-common-bin
-realm join --user=administrator au-team.irpo
+sudo apt-get install samba-common realmd sssd adcli krb5-user libnss-winbind libpam-winbind
+sudo realm join --user=Administrator HQ.LOCAL
+getent passwd user1.hq@HQ.LOCAL
+getent group hq@HQ.LOCAL
+sudo systemctl restart sssd
+sudo visudo  # добавить: %hq ALL=(ALL) NOPASSWD: /usr/bin/cat, /usr/bin/grep, /usr/bin/id
 ```
 
-### 3. RAID 5 + NFS (HQ-SRV)
+## 3. RAID5 и NFS на HQ-SRV
 ```bash
-apt install -y mdadm nfs-kernel-server
-mdadm --create /dev/md0 --level=5 --raid-devices=3 /dev/sdb /dev/sdc /dev/sdd
-mkfs.ext4 /dev/md0 && echo "/dev/md0 /raid5 ext4 defaults 0 0" >> /etc/fstab
-mkdir -p /raid5/nfs && chown nobody:nogroup /raid5/nfs
-echo "/raid5/nfs 192.168.100.0/24(rw,sync,no_subtree_check)" >> /etc/exports
-exportfs -a && systemctl restart nfs-kernel-server
+sudo apt-get install mdadm
+sudo mdadm --create --verbose /dev/md0 --level=5 --raid-devices=3 /dev/sdb /dev/sdc /dev/sdd
+sudo mdadm --detail --scan | sudo tee -a /etc/mdadm.conf
+sudo update-initramfs -u
+sudo parted /dev/md0 --script mklabel gpt
+sudo parted /dev/md0 --script mkpart primary ext4 0% 100%
+sudo mkfs.ext4 /dev/md0p1
+sudo mkdir -p /raid5
+sudo mount /dev/md0p1 /raid5
+# Добавить в /etc/fstab:
+# UUID=<UUID> /raid5 ext4 defaults 0 0
+
+sudo apt-get install nfs-kernel-server
+sudo mkdir /raid5/nfs
+sudo chown nobody:nogroup /raid5/nfs
+# В /etc/exports:
+/raid5/nfs 192.168.20.0/24(rw,sync,no_subtree_check,no_root_squash)
+sudo exportfs -r
+exportfs -v
+showmount -e localhost
+
+# На HQ-CLI:
+sudo apt-get install nfs-common
+sudo mkdir -p /mnt/nfs
+# В /etc/fstab:
+# 192.168.20.10:/raid5/nfs /mnt/nfs nfs defaults,_netdev 0 0
+sudo mount -a
+touch /mnt/nfs/testfile && echo "NFS OK" > /mnt/nfs/testfile
 ```
 
-### 4. Chrony NTP
+## 4. Chrony
 ```bash
-apt install -y chrony
-# /etc/chrony/chrony.conf: local stratum 5, allow 192.168.0.0/16
-systemctl restart chrony
-# Клиенты: server hq-rtr.au-team.irpo iburst
+# На HQ-RTR:
+sudo apt-get install chrony
+# В /etc/chrony.conf: добавить local stratum 5 и allow 192.168.20.0/24, allow 192.168.10.0/24
+sudo systemctl enable chronyd
+sudo systemctl restart chronyd
+
+# На клиентах:
+sudo apt-get install chrony
+# В /etc/chrony.conf: закомментировать pool*, добавить server 192.168.20.1 iburst
+sudo systemctl enable chronyd
+sudo systemctl restart chronyd
+chronyc tracking
+chronyc sources
 ```
 
-### 5. Ansible (BR-SRV)
+## 5. Ansible на BR-SRV
 ```bash
-apt install -y ansible
-cat <<EOF > /etc/ansible/hosts
-[routers]
-hq-rtr.au-team.irpo
-br-rtr.au-team.irpo
-
-[servers]
-hq-srv.au-team.irpo
-br-srv.au-team.irpo
-
-[clients]
-hq-cli.au-team.irpo
-
-[all:vars]
-ansible_user=net_admin
-ansible_ssh_pass=P@$$word
-ansible_become_pass=P@$$word
-EOF
-
+sudo apt-get install ansible
+ssh-keygen -t rsa
+ssh-copy-id sshuser@192.168.20.10
+ssh-copy-id sshuser@192.168.20.20
+ssh-copy-id net_admin@192.168.20.1
+ssh-copy-id net_admin@192.168.10.1
+# В /etc/ansible/hosts: добавить hq-srv, hq-cli, hq-rtr, br-rtr
+# В /etc/ansible/ansible.cfg: host_key_checking = False
 ansible all -m ping
 ```
 
-### 6. Docker + MediaWiki (BR-SRV)
+## 6. Docker MediaWiki на BR-SRV
 ```bash
-apt install -y docker.io docker-compose
-docker run -d -p 8080:80 --name mediawiki mediawiki
+sudo apt-get install docker.io docker-compose-plugin
+sudo apt-get install docker-compose
+# Создать ~/wiki.yml и ~/LocalSettings.php
+docker-compose -f wiki.yml up -d
+docker-compose ps
+docker-compose logs -f
+curl http://192.168.10.10:8080
 ```
+
+## 7. NAT на BR-RTR (Wiki)
+```bash
+sudo iptables -t nat -A PREROUTING -i eth0 -p tcp --dport 80 -j DNAT --to 192.168.10.10:8080
+sudo iptables -t nat -A POSTROUTING -o eth1 -p tcp -d 192.168.10.10 --dport 8080 -j MASQUERADE
+# Сохранить правила: iptables-save > /etc/iptables/rules.v4
+```
+
+## 8. Moodle на HQ-SRV
+```bash
+sudo apt-get install apache2 php libapache2-mod-php
+sudo apt-get install php-mysql php-xml php-gd php-intl php-curl php-zip php-mbstring
+sudo apt-get install mariadb-server
+sudo mysql_secure_installation
+sudo mysql -u root -p
+# В mysql:
+CREATE DATABASE moodledb DEFAULT CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;
+CREATE USER 'moodle'@'localhost' IDENTIFIED BY 'P@ssw0rd';
+GRANT ALL PRIVILEGES ON moodledb.* TO 'moodle'@'localhost';
+FLUSH PRIVILEGES;
+EXIT;
+cd /tmp
+wget https://download.moodle.org/download.php/direct/stable401/moodle-4.1.5.tgz -O moodle.tgz
+sudo tar -xzvf moodle.tgz -C /var/www/
+sudo mv /var/www/moodle /var/www/html/moodle
+sudo mkdir /var/moodledata
+sudo chown -R www-data:www-data /var/moodledata
+sudo chmod 0777 /var/moodledata
+sudo chown -R www-data:www-data /var/www/html/moodle
+sudo a2ensite moodle.conf
+sudo a2dissite 000-default.conf
+sudo systemctl reload apache2
+```
+
+## 9. Nginx Reverse Proxy на HQ-RTR
+```bash
+sudo apt-get install nginx
+# Создать /etc/nginx/sites-available/moodle.au-team.irpo.conf и wiki.au-team.irpo.conf
+sudo ln -s /etc/nginx/sites-available/moodle.au-team.irpo.conf /etc/nginx/sites-enabled/
+sudo ln -s /etc/nginx/sites-available/wiki.au-team.irpo.conf /etc/nginx/sites-enabled/
+sudo rm /etc/nginx/sites-enabled/default
+sudo nginx -t && sudo systemctl reload nginx
+```
+
+## 10. Яндекс.Браузер на HQ-CLI
+```bash
+sudo apt-get update
+sudo apt-get install yandex-browser-stable
+yandex-browser --version
+```
+
